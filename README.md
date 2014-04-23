@@ -27,51 +27,6 @@
   
   See tapsilog --help for details 
 
-**Sample File/Mongo Config**
-
-    port: 19080
-    host:
-      - 127.0.0.1
-    socket:
-      - /tmp/tapsilog.sock
-    daemonize: true
-    key: the_real_logger
-
-    syncinterval: 1
-
-    backend:
-      # Can be mongo or file
-      adapter: mongo
-
-      # Services not listed in logs section below will automatically be created under this collection (autocreate_namespace.service_name)
-      # If autocreate is off and an unknown service is requested, tapsilog uses the service named 'default'.
-      # If the service 'default' is not specified, tapsilog ignores the request 
-      #
-      # If file adapter is used, this is used to specify the directory where log files named by the service name are created.
-      #autocreate: development
-
-      # You can leave these blank and tapsilog connects using mongodb connection defaults
-      #host: 127.0.0.1
-      #port: 1234
-      #user: root
-      #password: somepassword
-      #database: tapsilog
-      
-      # For mongo adapter, target refers to the mongodb collection
-      # For file adapter, specify the path of the log file. You can also use stdout and stderr
-    logs:
-      - service: default
-        target: default
-
-      - service: access
-        target: /some/special/logfile
-
-        # You can override the global backend for this service
-        backend:
-          adapter: file
-
-      - service: bizsupport
-        target: bizsupport
 
 **Sample Proxy Config**
 
@@ -101,5 +56,5 @@
 
     logger = Palmade::Tapsilog::Logger.new('default', '/tmp/tapsilog.sock', 'some_serious_key')
     logger.level = Palmade::Tapsilog::Logger::DEBUG # defaults to INFO
-    logger.info("I am logging a message.", {:my_name => "tapsilog", :my_number => 2})
+    logger.info("I am logging a message.")
 
