@@ -1,0 +1,158 @@
+#!/usr/bin/env ruby
+
+TAPSILOG_VERSION = "0.3.6"
+
+require 'yaml'
+require 'optparse'
+require 'rubygems'
+
+config = {}
+
+optparse = OptionParser.new do |opts|
+  opts.banner = 'Usage: tapsilog_tail [options] ServiceName'
+
+  opts.separator ''
+
+  config[:configfile] = "/etc/tapsilog.yml"
+  opts.on('-c', '--config CONFFILE', "The configuration file to read. (/etc/tapsilog.yml)") do |conf|
+    config[:configfile] = conf
+  end
+
+  opts.on('-f', '--follow', "Output appended data as the file grows.") do
+    config[:follow] = true
+  end
+
+  config[:lines] = 10
+  opts.on('-n', '--lines LINES', "Output the last N lines, instead of the last 10.") do |lines|
+    config[:lines] = lines
+  end
+
+  config[:sleep] = 1
+  opts.on('-s', '--sleep S', "With -f, sleep for approximately S seconds. (default 1.0)") do |sec|
+    config[:sleep] = sec
+  end
+
+  opts.on('-h', '--help', "Show this message") do
+    puts opts
+    exit
+  end
+  opts.on('-v', '--version', "Show version") do
+    puts "tapsilog_tail #{TAPSILOG_VERSION}"
+    exit
+  end
+end
+optparse.parse!
+
+if ARGV.length == 0
+  puts optparse.help
+else
+  tapsilog_config = YAML.load(File.read(config[:configfile]))
+  service = ARGV.shift
+
+  tapsilog_config['backend'] ||= {}
+  tapsilog_backend = tapsilog_config['backend']
+  tapsilog_config['logs'] ||= []
+
+  if tapsilog_config['default_log']
+    tapsilog_config['logs'].push({'service' => 'default', 'target' => tapsilog_config['default_log']})
+  end
+
+  services = {}
+  tapsilog_config['logs'].each do |srv|
+    service_name = srv['service']
+    target = srv['target'] || srv['logfile']
+
+    services[service_name] = target
+
+    if srv['backend'] and service_name == service
+      tapsilog_config['backend'] = srv['backend']
+    end
+  end
+
+  adapter = tapsilog_config['backend']['adapter'] || 'file'
+
+  if adapter == 'file'
+    command = "tail"
+    command += " -f " if config[:follow]
+    command += " -n #{config[:lines]} " if config[:lines]
+
+    if services[service]
+      tail_target = services[service]
+    else
+      if autocreate = tapsilog_config['autocreate'] || tapsilog_backend['autocreate']
+        tail_target = File.join(autocreate, service)
+      else
+        tail_target = services['default']
+      end
+    end 
+
+    if tail_target.nil?
+      puts "Uknown service #{service}!"
+      exit
+    end
+
+    if tail_target == "stdout" or tail_target == "stderr"
+      puts "Cannot tail #{tail_target}!"
+      exit
+    end
+
+    puts "==> Tailing logs from file: #{tail_target} <==\n\n"
+
+    command += " #{tail_target} "
+    system command
+  elsif adapter == 'mongo'
+    require 'mongo' 
+
+    mongo_conn = Mongo::Connection.new(tapsilog_backend['host'], tapsilog_backend['port'])
+    db_name = tapsilog_backend['database'] || 'tapsilog'
+
+    db = mongo_conn.db(db_name)
+    if tapsilog_backend['user'] and tapsilog_backend['password']
+      db.authenticate(tapsilog_backend['user'], tapsilog_backend['password'])
+    end
+
+    if services[service]
+      tail_target = services[service]
+    else
+      if autocreate = tapsilog_config['autocreate'] || tapsilog_backend['autocreate']
+        tail_target = "#{autocreate}.#{service}"
+      else
+        tail_target = services['default']
+      end
+    end
+
+    if tail_target.nil?
+      puts "Unknown service #{service}!"
+      exit
+    end
+
+    last_id = nil
+    print_entries = lambda do |log_entries|
+      log_entries.each do |log|
+        last_id = log['_id']
+
+        message = [log['timestamp'], log['service'], log['pid'], log['message']]
+        message.push(log['tags'].inspect) unless log['tags'].nil?
+        puts message.join("|")
+      end
+    end
+
+    puts "==> Tailing logs from mongoDB: #{tail_target} <==\n\n"
+
+    last_entries = db[tail_target].find({}, :sort => ['_id', :desc], :limit => config[:lines].to_i).to_a.reverse
+    print_entries.call(last_entries)
+
+    if config[:follow]
+      trap("INT") { exit }
+
+      loop do
+        query = last_id ? {'_id' => {'$gt' => last_id}} : {}
+        new_entries = db[tail_target].find(query).to_a
+        print_entries.call(new_entries)
+        
+        sleep(config[:sleep].to_i)
+      end
+    end
+
+  end
+end

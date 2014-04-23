@@ -1,0 +1,117 @@
+#!/usr/bin/env ruby
+
+TAPSILOG_VERSION = "0.3.6"
+
+require 'yaml'
+require 'optparse'
+require 'rubygems'
+
+me_path = __FILE__
+if File.symlink?(me_path)
+  me_path = File.readlink(me_path)
+end
+
+relative_tapsilog_path = File.expand_path(File.join(File.dirname(me_path), '../lib/palmade'))
+
+if File.exists?(relative_tapsilog_path)
+  require File.join(relative_tapsilog_path, 'tapsilog')
+else
+  gem 'tapsilog'
+  require 'palmade/tapsilog'
+end
+
+module Palmade::Tapsilog
+  class TapsilogExec
+
+    @@config = {}
+
+    def self.start
+      loop do
+        catch(:hup) {
+          read_config
+          Palmade::Tapsilog::Server.start(@@config)
+        }
+      end
+    end
+
+    def self.stop
+      read_config
+      if Utils.pidf_running?(@@config[:pidfile])
+        pid = Utils.pidf_read(@@config[:pidfile])
+        puts "Sending QUIT to #{pid}"
+        Utils.pidf_kill(@@config[:pidfile])
+      else
+        puts "Tapsilog is not running"
+        Utils.pidf_clean(@@config[:pidfile])
+      end
+    end
+
+    def self.restart
+      read_config
+      stop
+      Utils.pidf_clean(@@config[:pidfile])
+      start
+    end
+
+    def self.status
+      read_config
+      if Utils.pidf_running?(@@config[:pidfile])
+        pid = Utils.pidf_read(@@config[:pidfile])
+        puts "Tapsilog is running with pid #{pid}"
+      else
+        puts "Tapsilog is not running"
+        Utils.pidf_clean(@@config[:pidfile])
+      end
+    end
+
+    def self.parse_options(config = {})
+      option_parser.parse!
+      @@config
+    end
+
+    def self.option_parser
+      OptionParser.new do |opts|
+        opts.banner = 'Usage: tapsilog [options] {start|stop|restart|status}'
+
+        opts.separator ''
+
+        @@config[:configfile] = "/etc/tapsilog.yml"
+        opts.on('-c', '--config CONFFILE', "The configuration file to read. (/etc/tapsilog.yml)") do |conf|
+          @@config[:configfile] = conf
+        end
+
+        @@config[:pidfile] = "/var/run/tapsilog.pid"
+        opts.on('-w', '--writepid FILENAME', "The filename to write a PID file to. (/var/run/tapsilog.pid)") do |pidfile|
+          @@config[:pidfile] = pidfile
+        end
+
+        opts.on('-h', '--help', "Show this message") do
+          puts opts
+          exit
+        end
+        opts.on('-v', '--version', "Show version") do
+          puts "tapsilog #{TAPSILOG_VERSION}"
+          exit
+        end
+
+      end
+    end
+
+    def self.read_config
+      if File.exists?(@@config[:configfile])
+        config = Utils.symbolize_keys(YAML.load(File.read(@@config[:configfile])))
+        @@config.merge!(config)
+      end
+    end
+
+  end
+end
+
+config = Palmade::Tapsilog::TapsilogExec.parse_options
+
+if ARGV.length == 0
+  puts Palmade::Tapsilog::TapsilogExec.option_parser.help
+else
+  action = ARGV.shift
+  Palmade::Tapsilog::TapsilogExec.send(action)
+end

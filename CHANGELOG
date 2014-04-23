@@ -1,0 +1,31 @@
+v0.3.6
+Fixed authentication bugs
+
+v0.3.5
+Fixed bug when using tapsilog client
+
+v0.3.4
+Fixed syntax error
+
+v0.3.3
+Fixed bug with stop/status/restart actions not reading config file
+
+v0.3.2
+Fixed bug when log message is sent in chunks
+
+v0.3.1
+Changed STDERR to $stderr to respect overrides
+
+v0.3.0
+Fully compatible with old analogger protocol
+Added support for overriding backend at service level
+**Previous tapsilog releases are not compatible anymore. Upgrade to 0.3.0 clients is required
+
+v0.2.0
+Improved command line interface
+Includes tapsilog_tail utility
+Added support for autocreate
+Added proxy backend
+
+v0.1.0
+Includes mongoDB support, and support for tagging logs.

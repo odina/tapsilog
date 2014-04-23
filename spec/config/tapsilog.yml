@@ -1,0 +1,18 @@
+port: 19100
+host: 127.0.0.1
+socket: /tmp/tapsilog_test.sock
+pidfile: /tmp/tapsilog_test.pid
+daemonize: false
+key: tapsilog_key
+
+syncinterval: 1
+
+levels: [ debug, info, warn, error, fatal ]
+
+backend:
+  adapter: file
+  autocreate: /tmp/tapsilog_test
+
+logs:
+  - service: default
+    target: /tmp/tapsilog_test/default
