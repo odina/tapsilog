@@ -1,0 +1,6 @@
+log/*
+tmp/*
+pkg/*
+*.yml
+*.DS_Store
+Gemfile.lock
